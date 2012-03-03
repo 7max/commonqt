@@ -165,26 +165,6 @@
       (error "INITIALIZE-INSTANCE of ~A failed to call Qt constructor"
              instance))))
 
-(defclass qt-class (standard-class)
-  ((qt-superclass :initarg :qt-superclass
-                  :accessor class-qt-superclass)
-   (signals :initarg :signals
-            :accessor class-signals)
-   (qt-slots :initarg :slots
-             :accessor class-slots)
-   (override-specs :initarg :override-specs
-                   :accessor class-override-specs)
-   (class-infos :initarg :class-infos
-                :accessor class-class-infos)
-   (effective-class :initform nil)
-   (qmetaobject :initform nil)
-   (smoke-generation :initform nil
-                     :accessor class-smoke-generation)
-   (generation :initform nil
-               :accessor class-generation)
-   (member-table :accessor class-member-table)
-   (overrides :accessor class-overrides)))
-
 (defun default-overrides ()
   (let ((overrides (make-hash-table :test 'equal)))
     (setf (gethash "metaObject" overrides) 'metaobject-override)

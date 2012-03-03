@@ -236,6 +236,11 @@
 (defun interpret-call-without-override (instance method &rest args)
   (%interpret-call nil instance method args))
 
+;; Move qt-class into classes.lisp instead
+;; (eval-when (:compile-toplevel :load-toplevel :execute)
+;;   (unless (find-class 'qt-class)
+;;     (defclass qt-class () ())))
+
 (defun full-resolve-this (instance)
   (etypecase instance
     (qobject  instance)
