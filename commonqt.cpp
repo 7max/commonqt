@@ -348,3 +348,49 @@ DEFINE_QLIST_SCALAR_MARSHALLER(QVariant, qvariant)
 DEFINE_QLIST_SCALAR_MARSHALLER(QByteArray, qbytearray)
 DEFINE_QLIST_SCALAR_MARSHALLER(QModelIndex, qmodelindex)
 DEFINE_QLIST_SCALAR_MARSHALLER(QKeySequence, qkeysequence)
+
+// QVector<QPointF> support
+
+EXPORT void* sw_qvector_qpointf_new(int size)
+{
+        return new QVector<QPointF>(size); 
+} 
+EXPORT void sw_qvector_qpointf_delete(void *ptr)
+{
+        QVector<QPointF> *v = static_cast<QVector<QPointF>*>(ptr);
+        delete v; 
+} 
+EXPORT int sw_qvector_qpointf_size(void *ptr)
+{
+        QVector<QPointF> *v = static_cast<QVector<QPointF>*>(ptr);
+        return v->size(); 
+} 
+EXPORT void* sw_qvector_qpointf_data(void *ptr)
+{
+        QVector<QPointF> *v = static_cast<QVector<QPointF>*>(ptr);
+        return v->data(); 
+} 
+
+// QVector<QPoint> support
+
+EXPORT void* sw_qvector_qpoint_new(int size)
+{
+        return new QVector<QPoint>(size); 
+} 
+EXPORT void sw_qvector_qpoint_delete(void *ptr)
+{
+        QVector<QPoint> *v = static_cast<QVector<QPoint>*>(ptr);
+        delete v; 
+} 
+EXPORT int sw_qvector_qpoint_size(void *ptr)
+{
+        QVector<QPoint> *v = static_cast<QVector<QPoint>*>(ptr);
+        return v->size(); 
+} 
+EXPORT void* sw_qvector_qpoint_data(void *ptr)
+{
+        QVector<QPoint> *v = static_cast<QVector<QPoint>*>(ptr);
+        return v->data(); 
+} 
+
+

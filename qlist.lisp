@@ -14,6 +14,72 @@
            (funcall cont qstringlist))
       (sw_qstringlist_delete qstringlist))))
 
+(macrolet
+    ((marshall-qvector-of-points (qt-types qvector-name cffi-type lisp-type)
+       (let ((new-func (intern (format nil "~:@(sw_qvector_~a_new~)" qvector-name)))
+             (data-func (intern (format nil "~:@(sw_qvector_~a_data~)" qvector-name)))
+             (del-func (intern (format nil "~:@(sw_qvector_~a_delete~)" qvector-name))))
+         `(defmarshal (value ,qt-types
+                       :around cont :type (sequence-or-ranked-array 2))
+            (etypecase value
+              (list
+               (let* ((len (length value))
+                      (len (if (evenp len) len
+                               (error "Must have even number of element in the list")))
+                      (qvector (,new-func len))
+                      (data (,data-func qvector))
+                      (idx 0))
+                 (unwind-protect
+                      (progn
+                        (dolist (elem value)
+                          (setf (cffi:mem-aref data ,cffi-type (* idx 2))
+                                (coerce (realpart elem) ',lisp-type)
+                                (cffi:mem-aref data ,cffi-type (1+ (* idx 2)))
+                                (coerce (imagpart elem) ',lisp-type))
+                          (incf idx))
+                        (funcall cont qvector))
+                   (,del-func qvector))))
+              (vector
+               (let* ((len (length value))
+                      (len (if (evenp len) len
+                               (error "Must have even number of element in the list")))
+                      (qvector (,new-func len))
+                      (data (,data-func qvector)))
+                 (unwind-protect
+                      (progn
+                        (loop
+                          for idx fixnum from 0 below len
+                          for elem = (aref value idx)
+                          do (setf (cffi:mem-aref data ,cffi-type (* idx 2))
+                                   (coerce (realpart elem) ',lisp-type)
+                                   (cffi:mem-aref data ,cffi-type (1+ (* idx 2)))
+                                   (coerce (imagpart elem) ',lisp-type)))
+                        (funcall cont qvector))
+                   (,del-func qvector))))
+              ((array number (* 2))
+               (let* ((len (array-dimension value 0))
+                      (qvector (,new-func len))
+                      (data (,data-func qvector)))
+                 (unwind-protect
+                      (progn
+                        (loop
+                          for idx fixnum from 0 below len
+                          do (setf (cffi:mem-aref data ,cffi-type (* idx 2))
+                                   (coerce (aref value idx 0) ',lisp-type)
+                                   (cffi:mem-aref data ,cffi-type (1+ (* idx 2)))
+                                   (coerce (aref value idx 1) ',lisp-type)))
+                        (funcall cont qvector))
+                   (,del-func qvector)))))))))
+  (marshall-qvector-of-points (:|QVector<QPointF>| :|const QVector<QPointF>&|)
+                              qpointf
+                              :double
+                              double-float)
+  (marshall-qvector-of-points (:|QVector<QPoint>| :|const QVector<QPoint>&|)
+                              qpoint
+                              :int
+                              integer))
+
+
 (defmarshal (value (:|QList<int>| :|const QList<int>&|) :around cont :type list)
   (let ((qlist (sw_qlist_int_new)))
     (unwind-protect
@@ -43,6 +109,7 @@
 
 (define-object-ptr-list-marshaller "QObject")
 (define-object-ptr-list-marshaller "QStandardItem")
+(define-object-ptr-list-marshaller "QGraphicsItem")
 
 (defmarshal (value (:|QList<QByteArray>| :|const QList<QByteArray>&|) :around cont :type list)
   (let ((qlist (sw_qlist_qbytearray_new)))

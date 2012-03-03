@@ -189,3 +189,20 @@
     (unwind-protect
          (funcall cont qbytearray)
       (sw_delete_qbytearray qbytearray))))
+
+(defmarshal (value (:|QPointF*| :|const QPointF*|) :around cont :type cffi:foreign-pointer)
+  (funcall cont value))
+
+(defmarshal (value (:|QLineF*| :|const QLineF*|) :around cont :type cffi:foreign-pointer)
+  (funcall cont value))
+
+;; Right now defmarshall does not allow creating marshallers from separate lisp types
+;; into the same QT type. So if we want to marshall into QT type from lets say both
+;; vector, list, and array then we need to define a encapsulating type
+;; and use typecase in the marshaller
+;;
+;; Below type is used for marshalling QVectors of simple objects such
+;; as QPointF's
+(deftype sequence-or-ranked-array (2nd-rank)
+  `(or list vector (array number (* ,2nd-rank))))
+

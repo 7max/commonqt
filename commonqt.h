@@ -80,6 +80,20 @@ DECLARE_QLIST_SCALAR_MARSHALLER(qbytearray)
 DECLARE_QLIST_SCALAR_MARSHALLER(qmodelindex)
 DECLARE_QLIST_SCALAR_MARSHALLER(qkeysequence)
 
+// QVector<QPointF> support
+EXPORT void* sw_qvector_qpointf_new(int size);
+EXPORT void sw_qvector_qpointf_delete(void *ptr);
+EXPORT int sw_qvector_qpointf_size(void *ptr);
+EXPORT void* sw_qvector_qpointf_data(void *ptr);
+
+EXPORT void* sw_qvector_qpoint_new(int size);
+EXPORT void sw_qvector_qpoint_delete(void *ptr);
+EXPORT int sw_qvector_qpoint_size(void *ptr);
+EXPORT void* sw_qvector_qpoint_data(void *ptr);
+
+EXPORT double sw_test_exception(int);
+EXPORT void sw_commonqt_eventloop(void); 
+
 #ifdef __cplusplus
 }
 #endif

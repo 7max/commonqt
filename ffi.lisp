@@ -51,7 +51,7 @@
          (namestring (make-pathname :name "libcommonqt"
                                     :type #+darwin "dylib" #-darwin "so"
                                     :defaults (asdf::component-relative-pathname
-                                               (asdf:find-system :qt)))))))
+                                       (asdf:find-system :qt)))))))
   (setf *library-loaded-p* t))
 
 #-(or ccl
@@ -118,6 +118,30 @@
 
 (defcfun "sw_qstring_to_utf16" :pointer
   (obj :pointer))
+
+(defcfun "sw_qvector_qpointf_new" :pointer
+  (size :int))
+
+(defcfun "sw_qvector_qpointf_delete" :void
+  (ptr :pointer))
+
+(defcfun "sw_qvector_qpointf_size" :int
+  (ptr :pointer))
+
+(defcfun "sw_qvector_qpointf_data" :pointer
+  (ptr :pointer))
+
+(defcfun "sw_qvector_qpoint_new" :pointer
+  (size :int))
+
+(defcfun "sw_qvector_qpoint_delete" :void
+  (ptr :pointer))
+
+(defcfun "sw_qvector_qpoint_size" :int
+  (ptr :pointer))
+
+(defcfun "sw_qvector_qpoint_data" :pointer
+  (ptr :pointer))
 
 (declaim (inline convert-qstring-data))
 (defun convert-qstring-data (data)
