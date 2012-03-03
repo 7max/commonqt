@@ -68,6 +68,9 @@
 (declaim (inline data-ref))
 (defun data-ref (i) (svref *module-data-table* i))
 
+(defvar *name-cache* (make-hash-table)
+  "Cache for the method and class name to smoke index")
+
 ;;;;
 ;;;; Bit bashing
 ;;;;
@@ -194,7 +197,10 @@
                    idx)))
 
 (defun qclass-name (<class>)
-  (cffi:foreign-slot-value (qclass-struct <class>) '|struct Class| 'classname))
+  (multiple-value-bind (name found) (gethash <class> *name-cache*)
+    (if found name
+        (setf (gethash <class> *name-cache*)
+              (cffi:foreign-slot-value (qclass-struct <class>) '|struct Class| 'classname)))))
 
 (defun qclass-external-p (<class>)
   (plusp
@@ -421,8 +427,11 @@
 (declaim (inline qmethod-name))
 (defun qmethod-name (<method>)
   (declare (type tagged <method>))
-  (name-ref (ldb-module <method>)
-            (the index (qmethod-name-index <method>))))
+  (multiple-value-bind (name found) (gethash <method> *name-cache*)
+    (if found name
+        (setf (gethash <method> *name-cache*)
+              (name-ref (ldb-module <method>)
+                        (the index (qmethod-name-index <method>)))))))
 
 (defun qmethod-flags (<method>)
   (cffi:foreign-slot-value (qmethod-struct <method>) '|struct Method| 'flags))
@@ -526,7 +535,10 @@
 (declaim (inline qtype-name))
 (defun qtype-name (<type>)
   (declare (type tagged <type>))
-  (cffi:foreign-slot-value (qtype-struct <type>) '|struct Type| 'name))
+  (multiple-value-bind (name found) (gethash <type> *name-cache*)
+    (if found name
+        (setf (gethash <type> *name-cache*)
+              (cffi:foreign-slot-value (qtype-struct <type>) '|struct Type| 'name)))))
 
 (defun qtype-interned-name (<type>)
   (intern (qtype-name <type>) :keyword))
