@@ -101,15 +101,100 @@
    (deleted :initform nil
             :accessor qobject-deleted)))
 
+(defun print-qobject (instance stream)
+  (let ((class (qobject-class instance))
+        (ptr (qobject-pointer instance)))
+    (macrolet ((is-class (name)
+                 `(eql class
+                       (with-cache () (find-qclass ,name)))))
+      (cond
+        ((is-class "QPoint")
+         (format stream "QPoint ~d ~d"
+                 (cffi:mem-aref ptr :int 0)
+                 (cffi:mem-aref ptr :int 1)))
+        ((is-class "QSize")
+         (format stream "QSize ~d ~d"
+                 (cffi:mem-aref ptr :int 0)
+                 (cffi:mem-aref ptr :int 1)))
+        ((is-class "QPointF")
+         (format stream "QPointF ~3,2f ~3,2f"
+                 (cffi:mem-aref ptr :double 0)
+                 (cffi:mem-aref ptr :double 1)))
+        ((is-class "QRect")
+         (multiple-value-bind (x1 y1 x2 y2)
+             (values (cffi:mem-aref ptr :int 0)
+                     (cffi:mem-aref ptr :int 1)
+                     (cffi:mem-aref ptr :int 2)
+                     (cffi:mem-aref ptr :int 3))
+           (format stream "QRect ~d ~d ~d ~d"
+                   x1 y1
+                   (1+ (- x2 x1))
+                   (1+ (- y2 y1)))))
+        ((is-class "QLine")
+         (multiple-value-bind (x1 y1 x2 y2)
+             (values (cffi:mem-aref ptr :int 0)
+                     (cffi:mem-aref ptr :int 1)
+                     (cffi:mem-aref ptr :int 2)
+                     (cffi:mem-aref ptr :int 3))
+           (format stream "QLine ~d ~d ~d ~d"
+                   x1 y1
+                   x2 y2)))
+        ((is-class "QRectF")
+         (multiple-value-bind (x y w h)
+             (values (cffi:mem-aref ptr :double 0)
+                     (cffi:mem-aref ptr :double 1)
+                     (cffi:mem-aref ptr :double 2)
+                     (cffi:mem-aref ptr :double 3))
+           (format stream "QRectF ~3F ~3F ~3F ~3F"
+                   x y w h)))
+        ((is-class "QLineF")
+         (multiple-value-bind (x y x2 y2)
+             (values (cffi:mem-aref ptr :double 0)
+                     (cffi:mem-aref ptr :double 1)
+                     (cffi:mem-aref ptr :double 2)
+                     (cffi:mem-aref ptr :double 3))
+           (format stream "QLineF ~3F ~3F ~3F ~3F"
+                   x y x2 y2)))
+        ((is-class "QPolygonF")
+         (let ((size (sw_qvector_qpointf_size ptr))
+               (data (sw_qvector_qpointf_data ptr)))
+           (format stream "QPolygonF")
+           (loop for i from 0 below (min (or *print-length* 15) size)
+              do (format stream " (~3,2f ~3,2f)"
+                         (cffi:mem-aref data :double (* i 2))
+                         (cffi:mem-aref data :double (1+ (* i 2)))))))
+        ((is-class "QPolygon")
+         (let ((size (sw_qvector_qpoint_size ptr))
+               (data (sw_qvector_qpoint_data ptr)))
+           (format stream "QPolygon")
+           (loop for i from 0 below (min (or *print-length* 15) size)
+              do (format stream " (~d ~d)"
+                         (cffi:mem-aref data :int (* i 2))
+                         (cffi:mem-aref data :int (1+ (* i 2)))))))
+        ((is-class "QTransform")
+         (let* ((data ptr)
+                (m11 (cffi:mem-aref data :double 0))
+                (m12 (cffi:mem-aref data :double 1))
+                (m21 (cffi:mem-aref data :double 2))
+                (m22 (cffi:mem-aref data :double 3))
+                (m31 (cffi:mem-aref data :double 4))
+                (m32 (cffi:mem-aref data :double 5))
+                (m13 (cffi:mem-aref data :double 6))
+                (m23 (cffi:mem-aref data :double 7))
+                (m33 (cffi:mem-aref data :double 8)))
+           (format stream "QTransform (~3,2f ~3,2f ~3,2f) (~3,2f ~3,2f ~3,2f) (~3,2f ~3,2f ~3,2f)"
+                   m11 m12 m13 m21 m22 m23 m31 m32 m33)))
+        (t (format stream "~A 0x~8,'0X"
+                   (qclass-name (qobject-class instance))
+                   (cffi:pointer-address ptr)))))))
+
 (defmethod print-object ((instance qobject) stream)
   (print-unreadable-object (instance stream :type nil :identity nil)
     (cond
       ((not (slot-boundp instance 'class))
        (format stream "uninitialized"))
       ((cffi:pointerp (qobject-pointer instance))
-       (format stream "~A 0x~8,'0X"
-               (qclass-name (qobject-class instance))
-               (cffi:pointer-address (qobject-pointer instance))))
+       (print-qobject instance stream))
       (t
        (format stream "~A ~A"
                (qclass-name (qobject-class instance))
@@ -243,7 +328,7 @@
                (and element-type
                     (alexandria:proper-list-p lisp-object)
                     (iter (for item in lisp-object)
-                          (always (can-marshal-p item element-type))))))
+                      (always (can-marshal-p item element-type))))))
             ((and (not (eq slot 'class))
                   (typep lisp-object
                          `(and ,(or (get slot 'lisp-type-for-stack-slot)
@@ -256,7 +341,15 @@
                                      'lisp-type-for-qtype t)))))
             ((type= (qtype-deconstify <type>)
                     (with-cache () (qt::find-qtype "QByteArray")))
-             (typep lisp-object 'string))))))
+             (typep lisp-object 'string))
+            ((and (type= <type> (with-cache () (qt::find-qtype "const QVector<QPointF>&")))
+                  (or (alexandria:proper-list-p lisp-object)
+                      (typep lisp-object '(sequence-or-ranked-array 2)))))
+            ((and (type= <type> (with-cache () (qt::find-qtype "const QVector<QPoint>&")))
+                  (or (alexandria:proper-list-p lisp-object)
+                      (typep lisp-object '(sequence-or-ranked-array 2)))))
+            ((and (alexandria:ends-with #\* (qtype-name <type>))
+                  (typep lisp-object 'cffi:foreign-pointer)))))))
 
 (defun find-applicable-method (object name args fix-types)
   (qclass-find-applicable-method (if (integerp object)
