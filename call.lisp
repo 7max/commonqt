@@ -452,13 +452,10 @@
 (defun null-qobject-p (object)
   (typep object 'null-qobject))
 
-
 #+(or)
 (defun run-pending ()
   (setf *pending-finalizations*
         (remove-if #'funcall *pending-finalizations*)))
-
-
 
 (defun note-deleted (object)
   (check-type object abstract-qobject)
@@ -466,7 +463,18 @@
     (cancel-finalization object)
     (let ((addr (cffi:pointer-address (qobject-pointer object))))
       (remhash addr *weakly-cached-objects*)
-      (remhash addr *strongly-cached-objects*))
+      (remhash addr *strongly-cached-objects*)
+      (map-cpl-using-result
+       (lambda (super casted)
+         (let* ((ptr (%cast casted super))
+                (super-addr (cffi:pointer-address ptr)))
+           (when (/= super-addr addr)
+             (remhash super-addr *weakly-cached-objects*))
+           (make-instance 'qobject
+                          :class super
+                          :pointer ptr)))
+       (qobject-class object)
+       object))
     (setf (qobject-deleted object) t)))
 
 (defun cancel-finalization (object)
@@ -511,3 +519,11 @@
              (funcall fun c)
              (map-qclass-superclasses #'recurse c)))
     (recurse class)))
+
+(defun map-cpl-using-result (fun class initial-value)
+  (labels ((recurse (c val)
+             (let ((newval (funcall fun c val)))
+               (map-qclass-superclasses
+                (lambda (sub) (recurse sub newval))
+                c))))
+    (recurse class initial-value)))

@@ -104,10 +104,15 @@
   (let ((ptr (qobject-pointer object)))
    ; (assert (null (pointer->cached-object ptr)))
     (setf (pointer->cached-object ptr) object)
-    (map-cpl (lambda (super)
-               (setf (pointer->cached-object (%cast object super))
-                     object))
-             (qobject-class object))
+    (assert (qobject-class object))
+    (map-cpl-using-result (lambda (super casted)
+                            (let ((ptr (%cast casted super)))
+                              (setf (pointer->cached-object ptr) object)
+                              (make-instance 'qobject
+                                             :class super
+                                             :pointer ptr)))
+                          (qobject-class object)
+                          object)
     (when (typep object 'dynamic-object)
       (setf (gethash (cffi:pointer-address ptr) *strongly-cached-objects*)
             object)))
@@ -130,12 +135,15 @@
    (cached-arg-types :accessor dynamic-member-cached-arg-types)))
 
 (defclass signal-member (dynamic-member)
-  ((name :initarg :name
-         :accessor dynamic-member-name)))
+  ())
 
 (defclass slot-member (dynamic-member)
   ((function :initarg :function
              :accessor dynamic-member-function)))
+
+(defmethod print-object ((instance dynamic-member) stream)
+  (print-unreadable-object (instance stream :type t :identity t)
+    (princ (dynamic-member-name instance) stream)))
 
 (defmethod print-object ((instance dynamic-object) stream)
   (print-unreadable-object (instance stream :type t :identity nil)
@@ -164,6 +172,26 @@
     (unless (cffi:pointerp (qobject-pointer instance))
       (error "INITIALIZE-INSTANCE of ~A failed to call Qt constructor"
              instance))))
+
+(defclass qt-class (standard-class)
+  ((qt-superclass :initarg :qt-superclass
+                  :accessor class-qt-superclass)
+   (signals :initarg :signals
+            :accessor class-signals)
+   (qt-slots :initarg :slots
+             :accessor class-slots)
+   (override-specs :initarg :override
+                   :accessor class-override-specs)
+   (class-infos :initarg :info
+                :accessor class-class-infos)
+   (effective-class :initform nil)
+   (qmetaobject :initform nil)
+   (smoke-generation :initform nil
+                     :accessor class-smoke-generation)
+   (generation :initform nil
+               :accessor class-generation)
+   (member-table :accessor class-member-table)
+   (overrides :accessor class-overrides)))
 
 (defun default-overrides ()
   (let ((overrides (make-hash-table :test 'equal)))
@@ -200,45 +228,64 @@
     ((cons (eql function) t)
      (eval form))))
 
+(defun compute-dynamic-member (description type acessor direct-superclasses)
+  (let ((result
+          (loop for (name . value) in description
+                when (or (not value)
+                         (car value))
+                collect
+                (if value
+                    (make-instance type
+                                   :name name
+                                   :function (parse-function (car value)))
+                    (make-instance type :name name)))))
+    (loop for class in direct-superclasses
+          when (typep class 'qt-class)
+          do (loop for object in (funcall acessor class)
+                   unless (find (dynamic-member-name object)
+                                description
+                                :key #'car :test #'equal)
+                   do (pushnew object result
+                               :test #'equal
+                               :key #'dynamic-member-name)))
+    result))
+
 (defun initialize-qt-class
     (class next-method &rest args
      &key qt-superclass direct-superclasses slots signals info override
      &allow-other-keys)
   (let* ((qt-superclass
-          (if qt-superclass
-              (destructuring-bind (name) qt-superclass
-                (check-type name string)
-                name)
-              nil))
+           (if qt-superclass
+               (destructuring-bind (name) qt-superclass
+                 (check-type name string)
+                 name)
+               nil))
          (direct-superclasses
-          (let ((qt-class (find-class 'qt-class))
-                (standard-object (find-class 'standard-object))
-                (dynamic-object (find-class 'dynamic-object)))
-            (if (some (lambda (c) (typep c qt-class))
-                      direct-superclasses)
-                direct-superclasses
-                (append (if (equal direct-superclasses (list standard-object))
-                            nil
-                            direct-superclasses)
-                        (list dynamic-object)))))
+           (let ((qt-class (find-class 'qt-class))
+                 (standard-object (find-class 'standard-object))
+                 (dynamic-object (find-class 'dynamic-object)))
+             (if (some (lambda (c) (typep c qt-class))
+                       direct-superclasses)
+                 direct-superclasses
+                 (append (if (equal direct-superclasses (list standard-object))
+                             nil
+                             direct-superclasses)
+                         (list dynamic-object)))))
          (slots
-          (iter (for (name value) in slots)
-                (collect (make-instance 'slot-member
-                                        :name name
-                                        :function (parse-function value)))))
+           (compute-dynamic-member slots 'slot-member
+                                   #'class-slots direct-superclasses))
          (signals
-          (iter (for (name) in signals)
-                (collect (make-instance 'signal-member
-                                        :name name))))
+           (compute-dynamic-member signals 'signal-member
+                                   #'class-signals direct-superclasses))
          (class-infos
-          (iter (for (name value) in info)
-                (collect (make-class-info name value))))
+           (iter (for (name value) in info)
+             (collect (make-class-info name value))))
          (override-specs
-          (iter (for (method fun) in override)
-                (collect (make-instance 'override-spec
-                                        :method-name method
-                                        :target-function
-                                        (parse-function fun))))))
+           (iter (for (method fun) in override)
+             (collect (make-instance 'override-spec
+                                     :method-name method
+                                     :target-function
+                                     (parse-function fun))))))
     (apply next-method
            class
            :allow-other-keys t
@@ -246,15 +293,14 @@
            :qt-superclass qt-superclass
            :slots slots
            :signals signals
-           :class-infos class-infos
-           :override-specs override-specs
+           :info class-infos
+           :override override-specs
            args)))
 
-(defmethod initialize-instance ((instance qt-class) &rest args
-                                &key &allow-other-keys)
+(defmethod initialize-instance :around ((instance qt-class) &rest args)
   (apply #'initialize-qt-class instance #'call-next-method args))
 
-(defmethod reinitialize-instance ((instance qt-class) &rest args)
+(defmethod reinitialize-instance :around ((instance qt-class) &rest args)
   (apply #'initialize-qt-class instance #'call-next-method args))
 
 (defun get-qt-class-member (qt-class id)
