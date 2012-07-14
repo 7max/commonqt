@@ -144,6 +144,10 @@ the actual form is being evaluated"
                                        :notifier *notifier*))
                      (#_setQuitOnLastWindowClosed *qapp* nil)
                      (loop
+                       #+swank
+                       (let ((swank:*sldb-quit-restart* 'abort))
+                         (#_exec *qapp*))
+                       #-swank
                        (#_exec *qapp*)))
                 (warn "QT Gui thread exited")
                 (if hooks
