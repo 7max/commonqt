@@ -32,17 +32,18 @@
   (fdefinition 'swank::interrupt-worker-thread))
 
 #+swank
-(defun swank::interrupt-worker-thread (id)
+(defun swank::interrupt-worker-thread (&rest args)
   "When Swank tries to interrupt repl-thread, and repl-thread
 is using Qt signal (emit ...) and is currently waiting for
 gui thread to finish, interrupt the gui thread instead where
 the actual form is being evaluated"
-  (if (and (eq id :repl-thread)
+  ;; old swank args are (id) and newer swank args are (connection id)
+  (if (and (member :repl-thread args)
            (boundp '*in-gui-thread*)
            *in-gui-thread*)
       (bt:interrupt-thread *gui-thread*
                            (lambda () (error "Interrupt from Emacs")))
-      (funcall *old-interrupt-worker-thread* id)))
+      (apply *old-interrupt-worker-thread* args)))
 
 (defun notifier-do-eval (notifier)
   (flet ((doit ()
